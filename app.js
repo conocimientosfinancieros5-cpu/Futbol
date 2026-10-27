@@ -1,200 +1,227 @@
 'use strict';
+const lessons = CURSO.niveles.flatMap(level => level.lecciones);
+const lessonIds = new Set(lessons.map(lesson => lesson.id));
+const pairs = [['Em','Am'],['G','C'],['C','D'],['D','A'],['Am','Dm'],['C','F'],['Bm','E']];
+const storageKey = 'de-a-una-cuerda:curso:v2';
+const state = { completed: new Set(), records: {} };
+const previews = new Set();
+const $ = selector => document.querySelector(selector);
+const label = key => CURSO.acordes[key].etiqueta || key;
 
-// Las posiciones van de la sexta cuerda (Mi grave) a la primera (Mi agudo).
-const chords = {
-  Em: { name: 'Mi menor', frets: [0,2,2,0,0,0], fingers: [0,2,3,0,0,0], notes: [4,7,11] },
-  Am: { name: 'La menor', frets: [-1,0,2,2,1,0], fingers: [0,0,2,3,1,0], notes: [9,0,4] },
-  D: { name: 'Re mayor', frets: [-1,-1,0,2,3,2], fingers: [0,0,0,1,3,2], notes: [2,6,9] },
-  C: { name: 'Do mayor', frets: [-1,3,2,0,1,0], fingers: [0,3,2,0,1,0], notes: [0,4,7] },
-  G: { name: 'Sol mayor', frets: [3,2,0,0,0,3], fingers: [2,1,0,0,0,3], notes: [7,11,2] },
-  E: { name: 'Mi mayor', frets: [0,2,2,1,0,0], fingers: [0,2,3,1,0,0], notes: [4,8,11] }
-};
-const tuning = [
-  { note: 'E', name: 'Mi', hz: 82.4069 }, { note: 'A', name: 'La', hz: 110 },
-  { note: 'D', name: 'Re', hz: 146.8324 }, { note: 'G', name: 'Sol', hz: 195.9977 },
-  { note: 'B', name: 'Si', hz: 246.9417 }, { note: 'E', name: 'Mi', hz: 329.6276 }
-];
-
-function chordDiagram(key) {
-  const chord = chords[key];
-  const labels = ['6ª E','5ª A','4ª D','3ª G','2ª B','1ª E'];
-  const description = chord.frets.map((fret,i) => `${labels[i]}: ${fret < 0 ? 'no tocar' : fret === 0 ? 'al aire' : `traste ${fret}, dedo ${chord.fingers[i]}`}`).join('; ');
-  let drawing = '';
-  for (let fret = 0; fret <= 4; fret++) drawing += `<line x1="27" y1="40" x2="127" y2="40" transform="translate(0 ${fret*27})" stroke="${fret === 0 ? '#263d33' : '#abb3a4'}" stroke-width="${fret === 0 ? 5 : 1}"/>`;
-  chord.frets.forEach((fret,i) => {
-    const x = 27+i*20;
-    drawing += `<line x1="${x}" y1="40" x2="${x}" y2="148" stroke="#7a897a"/><text x="${x}" y="167" text-anchor="middle" font-size="9" fill="#667168">${6-i}</text>`;
-    if (fret <= 0) drawing += `<text x="${x}" y="28" text-anchor="middle" font-size="15" fill="#263d33">${fret < 0 ? '×' : '○'}</text>`;
-    else drawing += `<circle cx="${x}" cy="${40+(fret-.5)*27}" r="9" fill="#234c3e"/><text x="${x}" y="${44+(fret-.5)*27}" text-anchor="middle" font-size="11" fill="white">${chord.fingers[i]}</text>`;
-  });
-  return `<figure class="chord"><figcaption>${chord.name} · ${key}</figcaption><svg viewBox="0 0 154 180" role="img" aria-label="${chord.name}: ${description}">${drawing}</svg><small>${chord.frets.map(f => f < 0 ? 'x' : f).join('')}</small></figure>`;
+function readState(raw) {
+  const saved = JSON.parse(raw || '{}');
+  if (!saved || typeof saved !== 'object' || Array.isArray(saved)) throw new Error('Formato de progreso inválido');
+  return {
+    completed: new Set(Array.isArray(saved.completed) ? saved.completed.filter(id => lessonIds.has(id)) : []),
+    records: Object.fromEntries(pairs.map(pair => pair.join('–')).filter(key => Number.isSafeInteger(saved.records?.[key]) && saved.records[key] >= 0).map(key => [key, saved.records[key]]))
+  };
 }
-const chordGroup = keys => `<p class="legend">Mirá el diapasón de frente: 6ª (grave) a la izquierda, 1ª (aguda) a la derecha. Arriba está la cejuela. ○ = al aire; × = no tocar. Números dentro de los puntos: 1 índice, 2 medio, 3 anular, 4 meñique.</p><div class="chords">${keys.map(chordDiagram).join('')}</div>`;
-const lessons = [
-  { title: 'Conocé tu guitarra', meta: 'PARTES Y POSTURA · 5 MIN', intro: 'Antes de tocar, buscá una posición cómoda. La guitarra criolla tiene cuerdas de nailon: las tres graves llevan un entorchado metálico.', steps: ['Ubicá la caja (cuerpo), la boca, el puente, el mástil, los trastes, la cejuela y las clavijas. El puente sujeta las cuerdas en la caja; las clavijas cambian su tensión.', 'Sentate en una silla firme, con los pies apoyados. Si tocás como diestro, apoyá la caja en el muslo derecho; también podés usar la postura clásica, sobre el izquierdo elevado con un apoyo estable. Si sos zurdo, invertí la postura.', 'Dejá los hombros sueltos, el mástil un poco elevado y el pulgar detrás del mástil. No aprietes de más ni quiebres la muñeca. Si duele, pará y acomodate.'], exercise: 'Ubicá cada parte sin mirar la lista. Después tocá cada cuerda al aire con el pulgar, de la más gruesa a la más finita.' },
-  { title: 'Afiná y escuchá', meta: 'AFINACIÓN ESTÁNDAR · 8 MIN', intro: 'De la cuerda más gruesa (6ª) a la más finita (1ª): E A D G B E, o Mi La Re Sol Si Mi. Tocá una referencia y comparala con tu cuerda al aire. Estos tonos no escuchan tu guitarra ni detectan la afinación.', steps: ['Bajá el volumen del dispositivo y elegí una cuerda. Cada referencia suena durante dos segundos; podés repetirla.', 'Tocá esa cuerda al aire y escuchá si está más grave o más aguda que la referencia. Girá la clavija correspondiente de a poquito: más tensión sube la nota, menos tensión la baja. No fuerces la cuerda.', 'Si todavía te cuesta comparar de oído, usá un afinador cromático en modo guitarra. Revisá las seis cuerdas otra vez al terminar.'], extra: `<div class="tones">${tuning.map((t,i) => `<button class="tone" data-tone="${i}" aria-label="Escuchar ${6-i}ª cuerda, ${t.name}, ${t.hz.toFixed(2)} hercios"><span>${6-i}ª cuerda · ${t.name}</span><strong>▶ ${t.note}</strong><span>${t.hz.toFixed(2)} Hz</span></button>`).join('')}</div>`, exercise: 'Afiná las seis cuerdas despacio. Después nombrá sus notas mientras las tocás, de la sexta a la primera.' },
-  { title: 'Tus primeros tres acordes', meta: 'MI MENOR · LA MENOR · RE MAYOR · 12 MIN', intro: 'Un acorde reúne varias notas. Apoyá las puntas de los dedos cerca del traste metálico, del lado de la cejuela, sin quedar encima del metal.', steps: ['Armá Mi menor (Em). Tocá las seis cuerdas una por una: todas deberían sonar claras.', 'Armá La menor (Am) y tocá desde la quinta cuerda. Para Re mayor (D), empezá desde la cuarta: evitá las cuerdas marcadas con ×.', 'Si una cuerda se apaga, arqueá un poquito el dedo que la roza. Aflojá la mano entre intentos.'], extra: chordGroup(['Em','Am','D']), exercise: 'Armá cada acorde cinco veces. En cada intento, tocá las cuerdas por separado y después hacé un rasguido suave.' },
-  { title: 'Dale movimiento a la mano', meta: 'RASGUIDO ABAJO Y ARRIBA · 8 MIN', intro: 'Abajo (↓) va de las cuerdas graves hacia las agudas; arriba (↑), de las agudas hacia las graves. La muñeca queda suelta y el movimiento es chiquito.', steps: ['Armá Em. Contá en voz alta «1 y 2 y 3 y 4 y», repartiendo las ocho sílabas a la misma distancia.', 'Tocá hacia abajo en cada número y hacia arriba en cada «y». En la subida alcanza con rozar las cuerdas agudas.', 'Repetí sin acelerar. Después probá Am y D, respetando su primera cuerda permitida.'], extra: `<div class="pattern" aria-label="Patrón: 1 abajo, y arriba, 2 abajo, y arriba, 3 abajo, y arriba, 4 abajo, y arriba">${['1','y','2','y','3','y','4','y'].map((n,i)=>`<span>${n}<b>${i%2?'↑':'↓'}</b><small>${i%2?'arriba':'abajo'}</small></span>`).join('')}</div>`, exercise: 'Hacé ocho vueltas del patrón con Em. Buscá un volumen parejo; por ahora, la velocidad no importa.' },
-  { title: 'Cambiá sin perder el pulso', meta: 'CAMBIOS DE ACORDE · 10 MIN', intro: 'El metrónomo marca un pulso parejo. Cada clic equivale a una negra; el primer clic de cada grupo de cuatro suena más agudo. Empezá en 60 BPM.', steps: ['Activá el metrónomo y contá «1, 2, 3, 4». Tocá un rasguido hacia abajo con cada clic.', 'Tocá cuatro pulsos de Em y cuatro de Am. Prepará el cambio al final del cuarto pulso. Si cuesta, practicá más lento.', 'Sumá D: cuatro pulsos de Em, cuatro de Am y cuatro de D. Subí 5 BPM recién cuando puedas dar varias vueltas con comodidad.'], extra: '<div class="metro"><label for="bpm">Velocidad <span><output id="bpm-value" for="bpm">60</output> BPM</span></label><input id="bpm" type="range" min="40" max="160" step="1" value="60"><div class="beats" aria-hidden="true"><span class="beat"></span><span class="beat"></span><span class="beat"></span><span class="beat"></span></div><button id="metro-toggle" aria-pressed="false">Iniciar metrónomo</button></div>', exercise: 'Sostené un minuto de cambios Em–Am a 60 BPM, o más lento si lo necesitás. Si perdés el pulso, dejá pasar una vuelta y volvé a entrar en el 1.' },
-  { title: 'Abrí el juego con más acordes', meta: 'DO · SOL · MI MAYOR · 12 MIN', intro: 'Con Do (C), Sol (G) y Mi mayor (E) ampliás tu paleta. Mi mayor se parece a Mi menor: se suma el índice en el primer traste de la tercera cuerda.', steps: ['Armá C y rasgueá desde la quinta cuerda. La sexta no se toca.', 'Armá G con medio en sexta/traste 3, índice en quinta/traste 2 y anular en primera/traste 3. Suenan las seis cuerdas.', 'Armá E y tocá las seis cuerdas. Alterná E y Em para escuchar cómo cambia el carácter del acorde.'], extra: chordGroup(['C','G','E']), exercise: 'Tocá C–G–D–Em con cuatro rasguidos abajo por acorde, bien lento. Después alterná Am–E, cuatro pulsos cada uno.' },
-  { title: 'Un primer aire de zamba', meta: 'RITMO DE ZAMBA BÁSICO · 12 MIN', intro: 'La zamba argentina juega con la sensación de 6/8 y 3/4. Arrancá con esta base simplificada en seis corcheas: no agota las variantes del rasguido tradicional.', steps: ['Contá «1 2 3 · 4 5 6» en dos grupos de tres, marcando con la voz el 1 y el 4. Primero hacelo sin guitarra.', 'Con Am, tocá un bajo en la quinta cuerda en 1, bajá sobre las cuerdas agudas en 3 y 4, y subí suavemente en 6. En 2 y 5 no ataques las cuerdas: dejá resonar.', 'Repetí despacio y con balanceo, sin convertirlo en una marcha. Alterná dos compases de Am y dos de E; en E usá la sexta cuerda para el bajo.'], extra: `<div class="pattern zamba" aria-label="Seis corcheas: 1 bajo, 2 sin ataque, 3 abajo, 4 abajo acentuado, 5 sin ataque, 6 arriba">${['bajo','resuena','abajo','abajo','resuena','arriba'].map((n,i)=>`<span class="${i===0||i===3?'accent':''}">${i+1}<b>${['●','—','↓','↓','—','↑'][i]}</b><small>${n}</small></span>`).join('')}</div><p class="legend">Practicalo primero sin metrónomo. Si usás el de la lección 5 como guía de corcheas, cada clic será una de estas seis posiciones: ignorá su acento cada cuatro clics.</p>`, exercise: 'Hacé cuatro vueltas de Am–E sin cortar el movimiento. Después escuchá una zamba e intentá reconocer ese balanceo, aunque el acompañamiento tenga más adornos.' }
-];
-
-const storageKey = 'de-a-una-cuerda:progreso:v1';
-let completed = new Set();
-try {
-  const saved = JSON.parse(localStorage.getItem(storageKey) || '[]');
-  if (Array.isArray(saved)) completed = new Set(saved.filter(n => Number.isInteger(n) && n >= 1 && n <= lessons.length));
-} catch { document.querySelector('#storage-status').textContent = 'No pudimos leer tu progreso guardado. Podés seguir aprendiendo igual.'; }
-
-document.querySelector('#lesson-nav').innerHTML = lessons.map((lesson,i)=>`<li id="nav-${i+1}"><a href="#leccion-${i+1}" data-lesson="${i+1}"><span class="nav-number">${String(i+1).padStart(2,'0')}</span>${lesson.title}</a></li>`).join('');
-document.querySelector('#lesson-list').innerHTML = lessons.map((lesson,i)=>`<details class="lesson" id="leccion-${i+1}" ${i===0?'open':''}><summary><span class="lesson-number">${String(i+1).padStart(2,'0')}</span><div><span class="lesson-meta">${lesson.meta}</span><h2>${lesson.title}</h2></div></summary><div class="lesson-body"><p>${lesson.intro}</p><h3>Paso a paso</h3><ol>${lesson.steps.map(step=>`<li>${step}</li>`).join('')}</ol>${lesson.extra || ''}<div class="exercise"><strong>A PRACTICAR</strong>${lesson.exercise}</div><button class="complete" data-complete="${i+1}" aria-pressed="false">Completada</button></div></details>`).join('');
-
-function updateProgress() {
-  document.querySelector('#progress').value = completed.size;
-  document.querySelector('#progress-text').textContent = `${completed.size} de 7 lecciones completadas${completed.size === 7 ? ' · ¡Bien ahí!' : ''}`;
-  document.querySelector('#progress-percent').textContent = `${Math.round(completed.size/lessons.length*100)}%`;
-  document.querySelectorAll('[data-complete]').forEach(button=>{
-    const done = completed.has(Number(button.dataset.complete));
-    button.setAttribute('aria-pressed',String(done));
-    button.textContent = done ? '✓ Completada' : 'Completada';
-    document.querySelector(`#nav-${button.dataset.complete}`).classList.toggle('done',done);
-  });
-}
-updateProgress();
-document.querySelectorAll('[data-complete]').forEach(button=>button.addEventListener('click',()=>{
-  const id = Number(button.dataset.complete);
-  if (completed.has(id)) completed.delete(id); else completed.add(id);
-  updateProgress();
-  try { localStorage.setItem(storageKey,JSON.stringify([...completed])); }
-  catch { document.querySelector('#storage-status').textContent = 'El navegador no permite guardar el progreso. Se mantiene mientras esta página siga abierta.'; }
-}));
-document.querySelectorAll('[data-lesson]').forEach(link=>link.addEventListener('click',()=>{
-  document.querySelector(`#leccion-${link.dataset.lesson}`).open = true;
-}));
-function openHash() {
-  if (/^#leccion-[1-7]$/.test(location.hash)) document.querySelector(location.hash).open = true;
-}
-window.addEventListener('hashchange',openHash);
-openHash();
-
-let audio;
-let reference;
-let timer;
-let running = false;
-let starting = false;
-let nextBeat = 0;
-let beat = 0;
-let animation;
-let visualBeats = [];
-let clicks = new Set();
-const audioStatus = document.querySelector('#audio-status');
-const metroButton = document.querySelector('#metro-toggle');
-const bpm = document.querySelector('#bpm');
-
-async function getAudio() {
-  const AudioContext = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContext) throw new Error('Tu navegador no admite Web Audio. Probá con un navegador actualizado.');
-  if (!audio) audio = new AudioContext();
-  await audio.resume();
-  if (audio.state !== 'running') throw new Error('No se pudo activar el audio. Volvé a tocar el botón.');
-  return audio;
-}
-function tone(frequency,time,duration,volume,type='sine') {
-  const oscillator = audio.createOscillator();
-  const gain = audio.createGain();
-  oscillator.type = type;
-  oscillator.frequency.value = frequency;
-  gain.gain.setValueAtTime(0,time);
-  gain.gain.linearRampToValueAtTime(volume,time+.008);
-  gain.gain.exponentialRampToValueAtTime(.0001,time+duration);
-  oscillator.connect(gain);
-  gain.connect(audio.destination);
-  oscillator.onended = ()=>{ oscillator.disconnect(); gain.disconnect(); clicks.delete(oscillator); };
-  oscillator.start(time);
-  oscillator.stop(time+duration+.02);
-  return oscillator;
-}
-document.querySelectorAll('[data-tone]').forEach(button=>button.addEventListener('click',async()=>{
+function loadState() {
+  try { Object.assign(state, readState(localStorage.getItem(storageKey))); }
+  catch { $('#storage-status').textContent = 'No pudimos leer el guardado. Podés practicar y completar lecciones en esta sesión.'; }
   try {
-    await getAudio();
-    stopMetro();
-    if (reference) { reference.stop(); reference = null; }
-    const item = tuning[Number(button.dataset.tone)];
-    reference = tone(item.hz,audio.currentTime,2,.24,'triangle');
-    const current = reference;
-    current.addEventListener('ended',()=>{ if (reference===current) reference=null; });
-    audioStatus.textContent = `Sonando: ${6-Number(button.dataset.tone)}ª cuerda, ${item.name} (${item.hz.toFixed(2)} Hz).`;
-  } catch (error) { audioStatus.textContent = error.message; }
-}));
+    if (localStorage.getItem('de-a-una-cuerda:progreso:v1')) $('#storage-status').textContent += ' Tu progreso del curso anterior sigue guardado; este recorrido tiene objetivos nuevos y empieza por separado.';
+  } catch { /* El aviso de lectura anterior ya explica el modo de sesión. */ }
+}
+function saveState() {
+  try { localStorage.setItem(storageKey, JSON.stringify({ completed:[...state.completed], records:state.records })); }
+  catch { $('#storage-status').textContent = 'El navegador no permite guardar. El avance y los récords se conservan mientras esta página siga abierta.'; }
+}
+function unlocked(index) {
+  return CURSO.niveles.slice(0,index).every(level => level.lecciones.every(lesson => state.completed.has(lesson.id)));
+}
+function chordDiagram(key) {
+  const chord = CURSO.acordes[key];
+  const fretted = chord.trastes.filter(fret => fret > 0);
+  const start = Math.max(...fretted) > 4 ? Math.min(...fretted) : 1;
+  const description = chord.trastes.map((fret,i) => `${6-i}ª cuerda: ${fret < 0 ? 'no tocar' : fret === 0 ? 'al aire' : `traste ${fret}, dedo ${chord.dedos[i]}`}`).join('; ');
+  let svg = `<text x="9" y="59" font-size="10">${start}</text>`;
+  for (let fret=0; fret<=4; fret++) svg += `<line x1="27" y1="${40+fret*27}" x2="127" y2="${40+fret*27}" stroke="#7a897a" stroke-width="${fret===0 && start===1 ? 4 : 1}"/>`;
+  for (let i=0; i<6; i++) svg += `<line x1="${27+i*20}" y1="40" x2="${27+i*20}" y2="148" stroke="#7a897a"/><text x="${27+i*20}" y="167" text-anchor="middle" font-size="10">${6-i}</text>`;
+  if (chord.cejilla) {
+    const [fret,from,to] = chord.cejilla;
+    svg += `<line x1="${27+from*20}" y1="${40+(fret-start+.5)*27}" x2="${27+to*20}" y2="${40+(fret-start+.5)*27}" stroke="#234c3e" stroke-width="17" stroke-linecap="round"/>`;
+  }
+  chord.trastes.forEach((fret,i) => {
+    const x=27+i*20, y=40+(fret-start+.5)*27;
+    svg += fret<=0 ? `<text x="${x}" y="28" text-anchor="middle" font-size="15">${fret<0 ? 'X' : '○'}</text>` : `<circle cx="${x}" cy="${y}" r="9" fill="#234c3e"/><text x="${x}" y="${y+4}" text-anchor="middle" font-size="11" fill="white">${chord.dedos[i]}</text>`;
+  });
+  return `<figure class="chord"><figcaption>${label(key)}</figcaption><svg viewBox="0 0 154 180" role="img" aria-label="${label(key)}: ${description}"><title>${label(key)}: ${description}</title>${svg}</svg><small>${chord.trastes.map(fret=>fret<0?'x':fret).join(' · ')}</small></figure>`;
+}
+function chordGroup(keys) {
+  if (!keys.length) return '';
+  return `<p class="legend">De frente: 6ª grave a la izquierda, 1ª aguda a la derecha. X = no tocar; ○ = al aire. Dedos: 1 índice, 2 medio, 3 anular, 4 meñique. La barra une las cuerdas de una cejilla; el número al costado indica el traste inicial.</p><div class="chords">${keys.map(chordDiagram).join('')}</div>`;
+}
+const list = items => items.map(item=>`<li>${item}</li>`).join('');
+function songCard(song) {
+  return `<details class="song"><summary><span class="lesson-meta">HITO MUSICAL · ${song.artista}</span><h3>${song.titulo}</h3></summary><div class="song-body"><p>${song.tonalidad} · ${song.capo} · ${song.compas}</p><p><b>Tempo orientativo de grabación:</b> ${song.bpm} BPM. <b>Arrancá en:</b> ${song.practica} BPM.</p><p>${song.patron}</p><p class="legend">Cada | separa compases. Un acorde solo ocupa el compás completo; cuando hay más, se indica su duración. No se incluyen letras ni melodías.</p><dl>${song.secciones.map(([name,chart])=>`<dt>${name}</dt><dd>${chart}</dd>`).join('')}</dl><p class="exercise">${song.consejo}</p>${chordGroup(song.acordes)}<p><a href="${song.fuente}" target="_blank" rel="noopener noreferrer">Fuente para contrastar el acompañamiento</a></p><button data-tempo="${song.practica}" data-meter="${song.metrica||4}">Preparar metrónomo · ${song.practica} BPM</button><p class="legend">Meta: dos pasadas completas a tempo de práctica sin detenerte. Después subí de a 5 BPM; repetí el nivel si todavía no sale cómodo.</p></div></details>`;
+}
+function render() {
+  $('#lesson-nav').innerHTML = CURSO.niveles.map((level,i)=>`<li id="nav-${level.id}"><a href="#nivel-${level.id}"><span class="nav-number">${i+1}</span><span>${level.nombre}<small class="nav-status"></small></span></a></li>`).join('');
+  $('#lesson-list').innerHTML = CURSO.niveles.map((level,i)=>`<section class="level" id="nivel-${level.id}"><p class="eyebrow">NIVEL ${i+1}</p><h2>${level.nombre}</h2><p>${level.bajada}</p><p class="level-status" role="status"></p><div class="lock-message"><p>Completá los niveles anteriores para desbloquear este recorrido. También podés explorarlo ahora.</p><button data-preview="${i}" aria-expanded="false" aria-controls="contenido-${level.id}">Ver igual</button></div><div class="level-content" id="contenido-${level.id}">${level.lecciones.map((lesson,j)=>`<details class="lesson" id="leccion-${lesson.id}" ${i===0 && j===0?'open':''}><summary><span class="lesson-number">${j+1}</span><div><span class="lesson-meta">PRÁCTICA · ${lesson.bpm} BPM</span><h3>${lesson.titulo}</h3></div></summary><div class="lesson-body"><h4>Objetivo</h4><p>${lesson.objetivo}</p><p>${lesson.explicacion}</p>${chordGroup(lesson.acordes)}<h4>Paso a paso</h4><ol>${list(lesson.pasos)}</ol>${lesson.patron?`<div class="pattern" aria-label="Patrón folk en ocho corcheas">${lesson.patron.map((stroke,k)=>`<span>${k%2?'y':k/2+1}<b>${stroke}</b></span>`).join('')}</div>`:''}<div class="exercise"><strong>A PRACTICAR · ${lesson.bpm} BPM</strong>${lesson.ejercicio}<p><b>Lo domino cuando:</b> ${lesson.dominio}</p><button data-tempo="${lesson.bpm}" data-meter="${lesson.metrica||4}">Preparar metrónomo</button>${lesson.cambios?'<button data-changes>Abrir minuto de cambios</button>':''}</div><h4>Si no sale, probá esto</h4><ul>${list(lesson.errores)}</ul><button class="complete" data-complete="${lesson.id}" aria-pressed="false">Completada</button></div></details>`).join('')}<div class="milestones"><p class="eyebrow">HACÉ MÚSICA CON LO QUE APRENDISTE</p><h3>Canciones del nivel</h3>${level.canciones.map(songCard).join('')}</div></div></section>`).join('');
+  updateProgress();
+}
+function updateProgress() {
+  $('#progress').max=lessons.length; $('#progress').value=state.completed.size;
+  $('#progress-text').textContent=`${state.completed.size} de ${lessons.length} lecciones completadas`;
+  $('#progress-percent').textContent=`${Math.round(state.completed.size/lessons.length*100)}%`;
+  document.querySelectorAll('[data-complete]').forEach(button=>{
+    const done=state.completed.has(button.dataset.complete);
+    button.setAttribute('aria-pressed',String(done)); button.textContent=done?'✓ Completada':'Completada';
+  });
+  CURSO.niveles.forEach((level,i)=>{
+    const section=$(`#nivel-${level.id}`), open=unlocked(i), preview=previews.has(i);
+    const count=level.lecciones.filter(lesson=>state.completed.has(lesson.id)).length;
+    section.querySelector('.level-content').hidden=!open && !preview;
+    section.querySelector('.lock-message').hidden=open;
+    section.querySelector('[data-preview]').textContent=preview?'Ocultar vista previa':'Ver igual';
+    section.querySelector('[data-preview]').setAttribute('aria-expanded',String(preview));
+    section.querySelector('.level-status').textContent=`${count}/${level.lecciones.length} completadas · ${open?'Disponible':preview?'Vista previa':'Bloqueado'}`;
+    const nav=$(`#nav-${level.id}`); nav.classList.toggle('done',count===level.lecciones.length);
+    nav.querySelector('.nav-status').textContent=`${count}/${level.lecciones.length} · ${open?'Disponible':'Bloqueado'}`;
+  });
+}
+function openHash() {
+  const id=location.hash.slice(1);
+  CURSO.niveles.forEach((level,i)=>{
+    if (id===`nivel-${level.id}` || level.lecciones.some(lesson=>id===`leccion-${lesson.id}`)) {
+      const target=document.getElementById(id);
+      if (!unlocked(i) && !previews.has(i)) { document.getElementById(`nivel-${level.id}`).scrollIntoView(); return; }
+      if (target.tagName==='DETAILS') target.open=true;
+      target.scrollIntoView();
+    }
+  });
+}
+let audio, metroTimer, animation, nextBeat=0, beat=0, running=false, starting=false;
+let visualBeats=[];
+const clicks=new Set();
+async function getAudio() {
+  const AudioContext=window.AudioContext||window.webkitAudioContext;
+  if (!AudioContext) throw new Error('Tu navegador no admite Web Audio. Probá con uno actualizado.');
+  if (!audio) audio=new AudioContext();
+  await audio.resume();
+  if (audio.state!=='running') throw new Error('No se pudo activar el audio. Volvé a tocar el botón.');
+}
+function clickAt(time,accent) {
+  const oscillator=audio.createOscillator(), gain=audio.createGain();
+  oscillator.frequency.value=accent?1000:700;
+  gain.gain.setValueAtTime(0,time); gain.gain.linearRampToValueAtTime(.16,time+.005); gain.gain.exponentialRampToValueAtTime(.0001,time+.045);
+  oscillator.connect(gain); gain.connect(audio.destination);
+  oscillator.onended=()=>{oscillator.disconnect();gain.disconnect();clicks.delete(oscillator);};
+  clicks.add(oscillator); oscillator.start(time); oscillator.stop(time+.06);
+}
 function schedule() {
-  while (nextBeat < audio.currentTime+.12) {
-    clicks.add(tone(beat===0?1000:700,nextBeat,.045,.16));
-    visualBeats.push({time:nextBeat,beat});
-    nextBeat += 60/Number(bpm.value);
-    beat = (beat+1)%4;
+  while (nextBeat<audio.currentTime+.1) {
+    clickAt(nextBeat,beat===0); visualBeats.push({time:nextBeat,beat});
+    nextBeat+=60/Number($('#bpm').value); beat=(beat+1)%Number($('#meter').value);
   }
 }
 function drawBeat() {
-  while (visualBeats.length && visualBeats[0].time <= audio.currentTime) {
-    const current = visualBeats.shift().beat;
+  while (visualBeats.length && visualBeats[0].time<=audio.currentTime) {
+    const current=visualBeats.shift().beat;
     document.querySelectorAll('.beat').forEach((dot,i)=>dot.classList.toggle('active',i===current));
   }
-  if (running) animation = requestAnimationFrame(drawBeat);
+  if (running) animation=requestAnimationFrame(drawBeat);
 }
 function stopMetro() {
-  running = false;
-  clearInterval(timer);
-  cancelAnimationFrame(animation);
-  clicks.forEach(click=>click.stop());
-  clicks.clear();
-  visualBeats = [];
+  running=false; clearInterval(metroTimer); cancelAnimationFrame(animation);
+  clicks.forEach(click=>click.stop()); clicks.clear(); visualBeats=[];
   document.querySelectorAll('.beat').forEach(dot=>dot.classList.remove('active'));
-  metroButton.textContent = 'Iniciar metrónomo';
-  metroButton.setAttribute('aria-pressed','false');
+  $('#metro-toggle').textContent='Iniciar metrónomo'; $('#metro-toggle').setAttribute('aria-pressed','false'); $('#tool-state').textContent='· A practicar';
 }
-metroButton.addEventListener('click',async()=>{
-  if (running) { stopMetro(); audioStatus.textContent='Metrónomo detenido.'; return; }
-  if (starting) return;
-  starting = true;
-  try {
-    await getAudio();
-    if (document.hidden) return;
-    if (reference) { reference.stop(); reference=null; }
-    running = true;
-    beat = 0;
-    nextBeat = audio.currentTime+.05;
-    schedule();
-    timer = setInterval(schedule,25);
-    drawBeat();
-    metroButton.textContent = 'Detener metrónomo';
-    metroButton.setAttribute('aria-pressed','true');
-    audioStatus.textContent = 'Metrónomo activo. El primer pulso de cada cuatro suena más agudo.';
-  } catch (error) { stopMetro(); audioStatus.textContent=error.message; }
-  finally { starting=false; }
-});
-bpm.addEventListener('input',()=>{
-  const value = Math.max(40,Math.min(160,Number(bpm.value)||60));
-  bpm.value = value;
-  document.querySelector('#bpm-value').value = value;
-});
-function silence() {
-  stopMetro();
-  if (reference) { reference.stop(); reference=null; }
-  audioStatus.textContent = '';
+function configureMeter() {
+  $('#meter').value=String([2,3,4].includes(Number($('#meter').value))?Number($('#meter').value):4);
+  $('#tools .beats').innerHTML=Array.from({length:Number($('#meter').value)},()=>'<span class="beat"></span>').join('');
 }
-document.addEventListener('visibilitychange',()=>{ if (document.hidden) silence(); });
-window.addEventListener('pagehide',silence);
-
-// Autocomprobación: cada diagrama debe formar exactamente la tríada indicada.
+let changeTimer, deadline=0, changeCount=0, activePair='';
+function remaining(now) { return Math.max(0,Math.ceil((deadline-now)/1000)); }
+function updateRecord() { $('#change-record').value=state.records[$('#change-pair').value]||0; }
+function finishChanges(cancelled=false) {
+  clearInterval(changeTimer); deadline=0;
+  if (!cancelled) { state.records[activePair]=Math.max(state.records[activePair]||0,changeCount); saveState(); $('#countdown').value=0; }
+  $('#change-status').textContent=cancelled?'Intento interrumpido: no se guardó el resultado. Iniciá otro minuto.':'Minuto terminado. Récord actualizado; contá sólo los cambios que sonaron claros.';
+  $('#change-start').textContent='Iniciar minuto'; $('#change-add').disabled=true; $('#change-pair').disabled=false; updateRecord();
+}
+function tickChanges() { $('#countdown').value=remaining(Date.now()); if (!remaining(Date.now())) finishChanges(); }
 function selfCheck() {
-  const openNotes = [40,45,50,55,59,64];
-  for (const [key,chord] of Object.entries(chords)) {
-    const notes = new Set(chord.frets.flatMap((fret,i)=>fret < 0 ? [] : [(openNotes[i]+fret)%12]));
-    if (notes.size !== 3 || !chord.notes.every(note=>notes.has(note))) throw new Error(`Diagrama incorrecto: ${key}`);
-    if (chord.frets.length !== 6 || chord.frets.some((fret,i)=>fret>0 && !(chord.fingers[i]>=1 && chord.fingers[i]<=4))) throw new Error(`Digitación incorrecta: ${key}`);
+  const openNotes=[40,45,50,55,59,64];
+  for (const [key,chord] of Object.entries(CURSO.acordes)) {
+    if (chord.trastes.length!==6 || chord.dedos.length!==6 || chord.trastes.some((fret,i)=>!Number.isInteger(fret) || fret< -1 || (fret>0 ? chord.dedos[i]<1||chord.dedos[i]>4 : chord.dedos[i]!==0))) throw new Error(`Digitación inválida: ${key}`);
+    const notes=new Set(chord.trastes.flatMap((fret,i)=>fret<0?[]:[(openNotes[i]+fret)%12]));
+    if (notes.size!==chord.notas.length || !chord.notas.every(note=>notes.has(note))) throw new Error(`Notas incorrectas: ${key}`);
+    if (chord.bajo!==undefined && (openNotes[chord.trastes.findIndex(fret=>fret>=0)]+chord.trastes.find(fret=>fret>=0))%12!==chord.bajo) throw new Error(`Bajo incorrecto: ${key}`);
+    if (chord.cejilla) {
+      const [fret,from,to]=chord.cejilla;
+      if (from>=to || chord.trastes.slice(from,to+1).some(value=>value<fret) || chord.trastes[from]!==fret || chord.trastes[to]!==fret) throw new Error(`Cejilla inválida: ${key}`);
+    }
+    if (!chordDiagram(key).includes('<svg')) throw new Error(`Falta SVG: ${key}`);
   }
-  if (lessons.length !== 7 || tuning.some((item,i)=>Math.abs(item.hz-440*2**((openNotes[i]-69)/12))>.001)) throw new Error('Revisar lecciones o afinación');
-  return '6 acordes y 6 frecuencias verificados; 7 lecciones.';
+  if (CURSO.niveles.length<6 || lessonIds.size!==lessons.length) throw new Error('Revisar niveles o identificadores');
+  const known=new Set();
+  for (const level of CURSO.niveles) {
+    if (level.lecciones.length<2 || !level.canciones.length) throw new Error(`Nivel incompleto: ${level.id}`);
+    for (const lesson of level.lecciones) {
+      if (!lesson.objetivo || !lesson.explicacion || lesson.pasos.length<3 || !lesson.ejercicio || !lesson.dominio || !lesson.errores.length || !(lesson.bpm>=30 && lesson.bpm<=220)) throw new Error(`Lección incompleta: ${lesson.id}`);
+      lesson.acordes.forEach(key=>{if (!CURSO.acordes[key]) throw new Error(`Falta acorde: ${key}`);known.add(key);});
+    }
+    for (const song of level.canciones) {
+      song.acordes.forEach(key=>{if (!known.has(key)) throw new Error(`Acorde no enseñado antes de ${song.titulo}: ${key}`);});
+      for (const [,chart] of song.secciones) {
+        const tokens=(chart.match(/\b[A-G](?:♯|♭|#|b)?(?:maj7|m7|m|7)?(?:\/[A-G](?:♯|#)?)?(?![a-z#])/g)||[]).map(t=>t.replace(/♯/g,'#').replace(/♭/g,'b'));
+        tokens.forEach(token=>{if (!song.acordes.some(key=>[key,label(key)].some(n=>n.replace(/♯/g,'#').replace(/♭/g,'b')===token))) throw new Error(`Acorde sin declarar en ${song.titulo}: ${token}`);});
+      }
+    }
+  }
+  pairs.flat().forEach(key=>{if (!CURSO.acordes[key]) throw new Error(`Par sin diagrama: ${key}`);});
+  return `${CURSO.niveles.length} niveles, ${lessons.length} lecciones, ${CURSO.niveles.reduce((sum,level)=>sum+level.canciones.length,0)} canciones y ${Object.keys(CURSO.acordes).length} diagramas verificados nota por nota.`;
 }
-selfCheck();
+function init() {
+  selfCheck(); loadState(); render(); configureMeter();
+  $('#change-pair').innerHTML=pairs.map(pair=>`<option>${pair.join('–')}</option>`).join(''); updateRecord();
+  document.addEventListener('click',event=>{
+    const button=event.target.closest('button'); if (!button) return;
+    if (button.dataset.complete) {
+      const id=button.dataset.complete; state.completed.has(id)?state.completed.delete(id):state.completed.add(id);
+      saveState(); updateProgress();
+    }
+    if (button.dataset.preview!==undefined) {
+      const index=Number(button.dataset.preview); previews.has(index)?previews.delete(index):previews.add(index); updateProgress();
+    }
+    if (button.dataset.tempo) {
+      stopMetro(); $('#bpm').value=button.dataset.tempo; $('#bpm-value').value=button.dataset.tempo;
+      $('#meter').value=button.dataset.meter; configureMeter(); $('#tools').open=true; $('#metro-toggle').focus();
+      $('#audio-status').textContent='Velocidad preparada. Tocá Iniciar para escuchar.';
+    }
+    if (button.hasAttribute('data-changes')) { $('#tools').open=true; $('#change-start').focus(); }
+  });
+  $('#metro-toggle').addEventListener('click',async()=>{
+    if (running) {stopMetro();$('#audio-status').textContent='Metrónomo detenido.';return;}
+    if (starting) return; starting=true; $('#metro-toggle').disabled=true;
+    try {
+      await getAudio(); if (document.hidden) return;
+      running=true;beat=0;nextBeat=audio.currentTime+.05;schedule();metroTimer=setInterval(schedule,25);drawBeat();
+      $('#metro-toggle').textContent='Detener metrónomo'; $('#metro-toggle').setAttribute('aria-pressed','true');
+      $('#audio-status').textContent='Activo. El primer pulso del compás lleva acento.'; $('#tool-state').textContent='· Metrónomo activo';
+    } catch (error) {stopMetro();$('#audio-status').textContent=error.message;}
+    finally {starting=false;$('#metro-toggle').disabled=false;}
+  });
+  $('#bpm').addEventListener('input',()=>{ $('#bpm').value=Math.max(30,Math.min(220,Number($('#bpm').value)||60)); $('#bpm-value').value=$('#bpm').value; });
+  $('#meter').addEventListener('change',()=>{stopMetro();configureMeter();$('#audio-status').textContent='Compás preparado. Volvé a iniciar el metrónomo.';});
+  $('#change-pair').addEventListener('change',updateRecord);
+  $('#change-start').addEventListener('click',()=>{
+    if (deadline) {finishChanges(true);return;}
+    activePair=$('#change-pair').value; changeCount=0; deadline=Date.now()+60000;
+    $('#change-count').value=0; $('#countdown').value=60; $('#change-pair').disabled=true;
+    $('#change-add').disabled=false;$('#change-start').textContent='Cancelar intento';$('#change-status').textContent='Contá cada llegada limpia al otro acorde.';
+    changeTimer=setInterval(tickChanges,100);$('#change-add').focus();
+  });
+  $('#change-add').addEventListener('click',()=>{
+    if (!deadline) return;
+    if (!remaining(Date.now())) {finishChanges();return;} $('#change-count').value=++changeCount;
+  });
+  function silence() {stopMetro(); if (deadline) finishChanges(true);}
+  document.addEventListener('visibilitychange',()=>{if(document.hidden) silence();});
+  window.addEventListener('pagehide',silence);
+  window.addEventListener('hashchange',openHash); if(location.hash) openHash();
+}
+if (typeof document!=='undefined') init();
