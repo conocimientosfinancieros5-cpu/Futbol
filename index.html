@@ -7,7 +7,7 @@
   <meta name="description" content="Aprendé guitarra criolla desde cero: un curso por niveles, canciones, acordes y metrónomo.">
   <title>De a una cuerda · Guitarra criolla</title>
   <link rel="stylesheet" href="style.css">
-  <script src="data.js" defer></script><script src="app.js" defer></script>
+  <script src="data.js" defer></script><script src="app.js" defer></script><script src="extras.js" defer></script>
 </head>
 <body>
   <a class="skip" href="#lecciones">Ir a las lecciones</a>
@@ -19,7 +19,31 @@
     </section>
     <section class="journey" aria-label="Tu progreso"><div><p class="eyebrow">TU RECORRIDO</p><p id="progress-text" aria-live="polite">Tu recorrido empieza acá</p></div><progress id="progress" max="1" value="0" aria-label="Lecciones completadas"></progress><span id="progress-percent">0%</span></section>
     <p id="storage-status" class="notice" role="status"></p>
-    <section class="practice-note"><h2>Un ratito, todos los días.</h2><p>Probá 20 minutos: 3 de sonido y postura, 5 de cambios, 7 de la lección y 5 de canción. Avanzá por lo que podés tocar con claridad, no por días transcurridos. Cada nivel puede llevar varias semanas.</p></section><div class="course" id="lecciones"><nav aria-label="Niveles del curso"><p class="eyebrow">SEIS NIVELES, UN CAMINO</p><ol id="lesson-nav"></ol><p class="nav-tip">Diez minutos hoy valen más que esperar al día perfecto.</p></nav><div id="lesson-list"></div></div>
+    <section class="practice-note"><h2>Un ratito, todos los días.</h2><p>Probá 20 minutos: 3 de sonido y postura, 5 de cambios, 7 de la lección y 5 de canción. Avanzá por lo que podés tocar con claridad, no por días transcurridos. Cada nivel puede llevar varias semanas.</p></section>
+    <section class="extras" id="jugar" aria-labelledby="jugar-titulo"><p class="eyebrow">JUGAR Y PRACTICAR</p><h2 id="jugar-titulo">Tu sala de ensayo</h2>
+      <p class="streak-line">🔥 Racha: <b id="streak">0</b> días · <span id="badge-count"></span></p>
+      <details class="extra" id="extra-play"><summary>🎶 Tocá con la app <small>Los acordes pasan al ritmo, como un karaoke de acordes</small></summary>
+        <label for="play-song">Canción</label><select id="play-song"></select>
+        <label for="play-bpm">Velocidad <span><output id="play-bpm-value">60</output> BPM</span></label><input id="play-bpm" type="range" min="40" max="160" value="60">
+        <label class="check"><input type="checkbox" id="play-loop"> Repetir al terminar</label>
+        <div class="play-stage" aria-live="polite"><p id="play-section"></p><p id="play-now"></p><p id="play-next"></p><div id="play-beats" class="beats" aria-hidden="true"></div><div id="play-diagram" class="chords"></div></div>
+        <button id="play-toggle" class="complete" aria-pressed="false">Tocar</button><p id="play-status" role="status">Arrancá lento: la velocidad sugerida ya está puesta.</p>
+      </details>
+      <details class="extra" id="extra-quiz"><summary>🧠 ¿Qué acorde es? <small>Mirá el diagrama y adiviná</small></summary>
+        <label class="check"><input type="checkbox" id="quiz-all"> Usar todos los acordes (no sólo los que ya aprendiste)</label>
+        <div id="quiz-diagram" class="chords"></div><div id="quiz-options" class="quiz-options"></div>
+        <p id="quiz-score">Racha: 0</p><p id="quiz-status" role="status"></p>
+      </details>
+      <details class="extra" id="extra-routine"><summary>⏱️ Rutina del día <small>Te armo la práctica según dónde estás</small></summary>
+        <label for="routine-min">Tiempo disponible <select id="routine-min"><option value="10">10 minutos</option><option value="20" selected>20 minutos</option><option value="30">30 minutos</option></select></label>
+        <ol id="routine-list" class="routine"></ol>
+        <div class="tool-actions"><button id="routine-start">Empezar rutina</button><button id="routine-skip" disabled>Siguiente bloque</button></div><p id="routine-status" role="status"></p>
+      </details>
+      <details class="extra" id="extra-badges"><summary>🏆 Racha y logros <small>Medallas por lo que vas consiguiendo</small></summary><ul id="badges" class="badges"></ul></details>
+      <details class="extra" id="extra-library"><summary>📖 Biblioteca de acordes <small>Todos los acordes del curso</small></summary>
+        <label for="library-search">Buscar</label><input id="library-search" type="search" placeholder="Ej: Am, séptima, Fa"><div id="library" class="chords"></div>
+      </details>
+    </section><div class="course" id="lecciones"><nav aria-label="Niveles del curso"><p class="eyebrow">SEIS NIVELES, UN CAMINO</p><ol id="lesson-nav"></ol><p class="nav-tip">Diez minutos hoy valen más que esperar al día perfecto.</p></nav><div id="lesson-list"></div></div>
         <aside class="toolbox" aria-label="Herramientas de práctica">
       <details id="tools"><summary>Metrónomo y cambios <span id="tool-state">· A practicar</span></summary>
         <div class="tool-grid"><section class="metro" aria-labelledby="metro-title"><h2 id="metro-title">Tu pulso</h2>
