@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#234c3e">
+  <meta name="description" content="Aprendé guitarra criolla desde cero: siete lecciones, acordes, tonos de afinación y metrónomo.">
+  <title>De a una cuerda · Guitarra criolla</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#lecciones">Ir a las lecciones</a>
+  <header><a class="brand" href="#">de a una cuerda<span>GUÍA DE GUITARRA CRIOLLA</span></a><span class="header-note">Sin apuro. Con música.</span></header>
+  <main>
+    <section class="hero" aria-labelledby="titulo">
+      <div><p class="eyebrow">TU PRIMER ACORDE EMPIEZA ACÁ</p><h1 id="titulo">Una guitarra.<br>Un ratito.<br><em>Y vos.</em></h1><p class="intro">Aprendé desde cero, paso a paso. Afiná, encontrá tus primeros acordes y dale ritmo a eso que tenés ganas de tocar.</p><a class="primary" href="#lecciones">Empezá a tocar <span aria-hidden="true">↗</span></a><p class="small">7 lecciones · A tu ritmo · Sin experiencia previa</p></div>
+      <div class="hero-art" aria-hidden="true"><svg viewBox="0 0 400 480"><circle cx="200" cy="245" r="175" fill="#deddbf"/><g transform="rotate(22 200 240)"><path d="M171 243 C118 214 78 255 91 302 C43 350 90 430 164 411 C239 437 291 366 245 312 C268 263 226 225 204 243Z" fill="#bd7049" stroke="#234c3e" stroke-width="3"/><path d="M173 247 Q144 277 116 300 M235 319 Q266 368 221 398" fill="none" stroke="#e9ab73" stroke-width="5"/><circle cx="182" cy="313" r="35" fill="#e8b67f" stroke="#234c3e" stroke-width="2"/><circle cx="182" cy="313" r="26" fill="#234c3e"/><path d="M170 269 L170 82 L196 82 L196 269" fill="#705344" stroke="#234c3e" stroke-width="3"/><path d="M167 84 L165 32 Q184 19 202 32 L199 84Z" fill="#bd7049" stroke="#234c3e" stroke-width="3"/><path d="M151 371 H213" stroke="#234c3e" stroke-width="12"/><g stroke="#f7e6c6" stroke-width="1"><path d="M175 42V371 M178 42V371 M181 42V371 M184 42V371 M187 42V371 M190 42V371"/></g><path d="M170 110H196 M170 137H196 M170 162H196 M170 186H196 M170 208H196 M170 229H196" stroke="#e8b67f" stroke-width="2"/></g><path d="M44 119l8-19 8 19-8 19Z M321 348l6-15 6 15-6 15Z" fill="#234c3e"/><text x="290" y="108" fill="#234c3e" font-size="45">♪</text></svg><span>LO LINDO ES EMPEZAR.</span></div>
+    </section>
+    <section class="journey" aria-label="Tu progreso"><div><p class="eyebrow">TU RECORRIDO</p><p id="progress-text" aria-live="polite">0 de 7 lecciones completadas</p></div><progress id="progress" max="7" value="0" aria-label="Lecciones completadas"></progress><span id="progress-percent">0%</span></section>
+    <p id="storage-status" class="notice" role="status"></p>
+    <div class="course" id="lecciones"><nav aria-label="Lecciones"><p class="eyebrow">PASO A PASO</p><ol id="lesson-nav"></ol><p class="nav-tip">Diez minutos hoy valen más que esperar al día perfecto.</p></nav><div id="lesson-list"></div></div>
+    <p id="audio-status" class="audio-status" role="status"></p>
+  </main>
+  <footer><span class="brand">de a una cuerda</span><p>Hecho para aprender, equivocarte y volver a tocar.</p></footer>
+  <noscript>Activá JavaScript para ver las lecciones, escuchar los tonos y guardar tu progreso.</noscript>
+</body>
+</html>
