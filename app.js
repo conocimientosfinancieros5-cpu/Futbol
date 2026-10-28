@@ -124,7 +124,7 @@ function drawBeat() {
   if (running) animation=requestAnimationFrame(drawBeat);
 }
 function stopMetro() {
-  running=false; clearInterval(metroTimer); cancelAnimationFrame(animation);
+  running=false; clearInterval(metroTimer); cancelAnimationFrame(animation); if (typeof stopPlay==='function') stopPlay('Detenido.');
   clicks.forEach(click=>click.stop()); clicks.clear(); visualBeats=[];
   document.querySelectorAll('.beat').forEach(dot=>dot.classList.remove('active'));
   $('#metro-toggle').textContent='Iniciar metrónomo'; $('#metro-toggle').setAttribute('aria-pressed','false'); $('#tool-state').textContent='· A practicar';
@@ -196,7 +196,7 @@ function init() {
   });
   $('#metro-toggle').addEventListener('click',async()=>{
     if (running) {stopMetro();$('#audio-status').textContent='Metrónomo detenido.';return;}
-    if (starting) return; starting=true; $('#metro-toggle').disabled=true;
+    if (starting) return; starting=true; $('#metro-toggle').disabled=true; if (typeof stopPlay==='function') stopPlay('Detenido: arrancó el metrónomo.');
     try {
       await getAudio(); if (document.hidden) return;
       running=true;beat=0;nextBeat=audio.currentTime+.05;schedule();metroTimer=setInterval(schedule,25);drawBeat();

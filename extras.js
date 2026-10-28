@@ -33,75 +33,102 @@ const allSongs = () => CURSO.niveles.flatMap((level, i) => level.canciones.map(s
 function chordKey(token) {
   return Object.keys(CURSO.acordes).find(key => norm(key) === norm(token) || norm(label(key)) === norm(token));
 }
+// Cada compás: [{ key, dur }] en pulsos. "F(1) C(½)" fija duraciones; sin paréntesis, el resto del compás se reparte parejo.
 function songBars(song) {
-  const bars = [];
+  const bars = [], beats = song.metrica || 4;
   for (const [section, chart] of song.secciones) {
     if (!chart.includes('|')) continue;
     for (const raw of chart.split('|')) {
-      const tokens = raw.replace(/\([^)]*\)/g, ' ').trim().split(/\s+/).filter(Boolean);
-      const keys = tokens.map(chordKey);
-      if (tokens.length && keys.every(Boolean)) bars.push({ section, chords: keys });
+      const tokens = raw.replace(/(^|\s)\([^)]*\)/g, ' ').trim().split(/\s+/).filter(Boolean);
+      const chords = tokens.map(token => {
+        const [, name, dur] = token.match(/^(.+?)(?:\((\d+|½)\))?$/);
+        return { key: chordKey(name), dur: dur === '½' ? .5 : dur ? Number(dur) : null };
+      });
+      if (!tokens.length || !chords.every(c => c.key)) continue;
+      const fixed = chords.reduce((sum, c) => sum + (c.dur || 0), 0), free = chords.filter(c => !c.dur).length;
+      chords.forEach(c => { if (!c.dur) c.dur = (beats - fixed) / free; });
+      bars.push({ section, chords, beats: free ? beats : fixed });
     }
   }
+  // Fichas cortas (un ciclo de 2–4 compases) se repiten hasta 8 para que una pasada sea práctica real.
+  const cycle = bars.slice();
+  while (bars.length && bars.length < 8) bars.push(...cycle);
   return bars;
 }
 const playable = () => allSongs().filter(({ song }) => songBars(song).length);
-let play = null;
+let play = null, playStarting = false;
 
 function stopPlay(message) {
   if (!play) return;
   clearInterval(play.timer); cancelAnimationFrame(play.raf); play = null;
+  clicks.forEach(click => click.stop()); clicks.clear();
+  document.querySelectorAll('#play-beats span').forEach(dot => dot.classList.remove('active'));
   $('#play-toggle').textContent = 'Tocar'; $('#play-toggle').setAttribute('aria-pressed', 'false');
   if (message) $('#play-status').textContent = message;
 }
-function showPlayChord(event) {
-  $('#play-section').textContent = event.countIn ? 'Cuenta de entrada' : `${event.section} · compás ${event.bar + 1} de ${play.bars.length}`;
-  $('#play-now').textContent = event.countIn ? event.beat + 1 : label(event.chord);
-  $('#play-next').textContent = event.next ? `Sigue: ${label(event.next)}` : '';
-  if (!event.countIn && event.chord !== play.shown) { play.shown = event.chord; $('#play-diagram').innerHTML = chordDiagram(event.chord); }
-  document.querySelectorAll('#play-beats span').forEach((dot, i) => dot.classList.toggle('active', i === event.beat));
+function showPlayEvent(event) {
+  if (event.type === 'click') {
+    document.querySelectorAll('#play-beats span').forEach((dot, i) => dot.classList.toggle('active', i === event.beat));
+    if (event.countIn) { $('#play-section').textContent = 'Cuenta de entrada'; $('#play-now').textContent = event.beat + 1; }
+    else $('#play-section').textContent = `${event.section} · compás ${event.bar + 1} de ${play.bars.length}`;
+  } else if (event.type === 'chord') {
+    $('#play-now').textContent = label(event.chord);
+    $('#play-next').textContent = event.next ? `Sigue: ${label(event.next)}` : '';
+    if (event.chord !== play.shown) { play.shown = event.chord; $('#play-diagram').innerHTML = chordDiagram(event.chord); }
+  } else finishPlay(event.time);
 }
-function playEvents(bars, beats) {
-  const events = Array.from({ length: beats }, (_, beat) => ({ countIn: true, beat }));
+// Línea de tiempo en pulsos (t): clics en cada pulso entero, cambios de acorde donde caigan (también a medio pulso).
+function playEvents(bars, beats, countIn) {
+  const events = [], chords = [];
+  let t = 0;
+  if (countIn) for (; t < beats; t++) events.push({ t, type: 'click', beat: t, countIn: true });
   bars.forEach((bar, b) => {
-    for (let beat = 0; beat < beats; beat++) {
-      const chord = bar.chords[Math.floor(beat * bar.chords.length / beats)];
-      events.push({ bar: b, beat, chord, section: bar.section });
-    }
+    for (let beat = 0; beat < bar.beats; beat++) events.push({ t: t + beat, type: 'click', beat, bar: b, section: bar.section });
+    let at = t;
+    bar.chords.forEach(c => { chords.push({ t: at, type: 'chord', chord: c.key }); at += c.dur; });
+    t += bar.beats;
   });
-  events.forEach((event, i) => { if (!event.countIn) event.next = events.slice(i + 1).find(e => e.chord && e.chord !== event.chord)?.chord; });
-  return events;
+  chords.forEach((event, i) => { event.next = chords.slice(i + 1).find(e => e.chord !== event.chord)?.chord; });
+  events.push(...chords, { t, type: 'end' });
+  return events.sort((a, b) => a.t - b.t);
+}
+function schedulePlay() {
+  while (play && play.i < play.events.length) {
+    const event = play.events[play.i], time = play.start + event.t * play.step;
+    if (time >= audio.currentTime + .1) break;
+    if (event.type === 'click') clickAt(time, event.beat === 0);
+    play.queue.push({ ...event, time }); play.i++;
+  }
 }
 async function startPlay() {
+  if (playStarting) return;
   const { song } = playable()[Number($('#play-song').value)];
   const bars = songBars(song), beats = song.metrica || 4, bpm = Number($('#play-bpm').value);
+  playStarting = true; $('#play-toggle').disabled = true;
   try { await getAudio(); } catch (error) { $('#play-status').textContent = error.message; return; }
+  finally { playStarting = false; $('#play-toggle').disabled = false; }
+  if (document.hidden) return;
   stopMetro();
-  const events = playEvents(bars, beats);
-  play = { bars, events, i: 0, shown: null, queue: [], next: audio.currentTime + .1, step: 60 / bpm, song };
-  $('#play-beats').innerHTML = '<span></span>'.repeat(beats);
-  const schedule = () => {
-    while (play && play.i < events.length && play.next < audio.currentTime + .1) {
-      clickAt(play.next, events[play.i].beat === 0);
-      play.queue.push({ time: play.next, event: events[play.i] });
-      play.next += play.step; play.i++;
-    }
-  };
+  play = { bars, beats, song, events: playEvents(bars, beats, true), i: 0, shown: null, queue: [], start: audio.currentTime + .1, step: 60 / bpm };
+  $('#play-beats').innerHTML = '<span></span>'.repeat(Math.max(...bars.map(b => b.beats), beats));
   const draw = () => {
-    if (!play) return;
-    while (play.queue.length && play.queue[0].time <= audio.currentTime) showPlayChord(play.queue.shift().event);
-    if (play.i >= events.length && !play.queue.length) return finishPlay();
-    play.raf = requestAnimationFrame(draw);
+    while (play && play.queue.length && play.queue[0].time <= audio.currentTime) showPlayEvent(play.queue.shift());
+    if (play) play.raf = requestAnimationFrame(draw);
   };
-  schedule(); play.timer = setInterval(schedule, 25); draw();
+  schedulePlay(); play.timer = setInterval(schedulePlay, 25); draw();
   $('#play-toggle').textContent = 'Detener'; $('#play-toggle').setAttribute('aria-pressed', 'true');
-  $('#play-status').textContent = `${song.titulo} a ${bpm} BPM. Cuatro clics de entrada y arrancás.`;
+  $('#play-status').textContent = `${song.titulo} a ${bpm} BPM. ${beats} clics de entrada y arrancás.`;
 }
-function finishPlay() {
+function finishPlay(endTime) {
   const { song } = play;
-  if (!extras.songsDone.includes(song.id)) extras.songsDone.push(song.id);
+  if (!extras.songsDone.includes(song.id)) { extras.songsDone.push(song.id); saveExtras(); }
   practicedToday();
-  if ($('#play-loop').checked) { stopPlay(); startPlay(); return; }
+  if ($('#play-loop').checked) {
+    // Sigue en tiempo desde el final exacto, sin otra cuenta de entrada.
+    Object.assign(play, { events: playEvents(play.bars, play.beats, false), i: 0, start: endTime });
+    $('#play-status').textContent = `Otra vuelta de ${song.titulo}.`;
+    return;
+  }
   stopPlay(`¡Pasada completa de ${song.titulo}! Si salió limpia, subí 5 BPM y repetí.`);
 }
 function setupPlay() {
@@ -110,8 +137,8 @@ function setupPlay() {
   const preset = () => {
     const { song } = songs[Number($('#play-song').value)];
     $('#play-bpm').value = song.practica; $('#play-bpm-value').value = song.practica;
-    $('#play-now').textContent = label(songBars(song)[0].chords[0]); $('#play-next').textContent = ''; $('#play-section').textContent = 'Listo para empezar';
-    $('#play-diagram').innerHTML = chordDiagram(songBars(song)[0].chords[0]);
+    $('#play-now').textContent = label(songBars(song)[0].chords[0].key); $('#play-next').textContent = ''; $('#play-section').textContent = 'Listo para empezar';
+    $('#play-diagram').innerHTML = chordDiagram(songBars(song)[0].chords[0].key);
   };
   $('#play-song').addEventListener('change', () => { stopPlay(); preset(); });
   $('#play-bpm').addEventListener('input', () => { $('#play-bpm-value').value = $('#play-bpm').value; });
@@ -134,7 +161,7 @@ function nextQuestion() {
   const others = shuffle((pool.length >= 4 ? pool : Object.keys(CURSO.acordes)).filter(k => k !== answer)).slice(0, 3);
   quiz.answer = answer;
   $('#quiz-diagram').innerHTML = chordDiagram(answer)
-    .replace(/<figcaption>.*?<\/figcaption>/, '').replace(/<title>.*?<\/title>/, '').replace(/aria-label="[^"]*"/, 'aria-label="Acorde misterioso"');
+    .replace(/<figcaption>.*?<\/figcaption>/, '').split(`${label(answer)}:`).join('Acorde misterioso:'); // oculta el nombre, conserva la digitación
   $('#quiz-options').innerHTML = shuffle([answer, ...others]).map(k => `<button data-quiz="${k}">${label(k)} · ${CURSO.acordes[k].nombre}</button>`).join('');
 }
 function answerQuiz(key) {
@@ -144,7 +171,7 @@ function answerQuiz(key) {
   if (quiz.run > extras.quizBest) { extras.quizBest = quiz.run; saveExtras(); }
   $('#quiz-status').textContent = right ? `¡Bien! Era ${label(quiz.answer)}.` : `Era ${label(quiz.answer)} (${CURSO.acordes[quiz.answer].nombre}). Armalo en la guitarra antes de seguir.`;
   $('#quiz-score').textContent = `Racha: ${quiz.run} · Récord: ${extras.quizBest}`;
-  nextQuestion();
+  nextQuestion(); $('#quiz-options button').focus();
 }
 
 // ---------- Rutina del día ----------
@@ -166,11 +193,11 @@ function routineBlocks(minutes) {
 }
 const mmss = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 function renderRoutine(blocks, active = -1, left = 0) {
-  $('#routine-list').innerHTML = blocks.map((b, i) => `<li class="${i === active ? 'active' : i < active ? 'done' : ''}"><b>${b.title}</b> · ${i === active ? mmss(left) : mmss(b.seconds)}<br><span>${b.text}</span></li>`).join('');
+  $('#routine-list').innerHTML = blocks.map((b, i) => `<li class="${i === active ? 'active' : i < active ? 'done' : ''}"><b>${b.title}</b> · <span${i === active ? ' id="routine-left"' : ''}>${i === active ? mmss(left) : mmss(b.seconds)}</span><br><span>${b.text}</span></li>`).join('');
 }
 function routineStep() {
   const left = Math.max(0, Math.ceil((routine.end - Date.now()) / 1000));
-  renderRoutine(routine.blocks, routine.i, left);
+  if ($('#routine-left')) $('#routine-left').textContent = mmss(left);
   if (!left) advanceRoutine();
 }
 function advanceRoutine() {
@@ -182,7 +209,8 @@ function advanceRoutine() {
     $('#routine-status').textContent = '¡Rutina terminada! Un día más en tu racha.';
     return;
   }
-  routine.end = Date.now() + routine.blocks[routine.i].seconds * 1000; routineStep();
+  routine.end = Date.now() + routine.blocks[routine.i].seconds * 1000;
+  renderRoutine(routine.blocks, routine.i, routine.blocks[routine.i].seconds);
 }
 function setupRoutine() {
   const preview = () => renderRoutine(routineBlocks(Number($('#routine-min').value)));
